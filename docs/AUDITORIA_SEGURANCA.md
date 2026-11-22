@@ -73,3 +73,9 @@ A função original `create_order` não impunha limites suficientes ao número d
 4. Verificar compatibilidade das migrations e Edge Functions.
 5. Instalar dependências, executar build e testes automatizados.
 6. Rever o diff final e atualizar o Pull Request antes de qualquer merge.
+
+## Revisão adicional — criação de pagamentos
+
+Foi identificado que o cliente enviava o campo `amount` diretamente ao inserir uma linha em `payments`. Embora a confirmação compare o valor com o total da encomenda, o cliente poderia registar um valor divergente e bloquear a confirmação legítima. Foi preparada a migração `20261122213000_server_side_payment_creation.sql`: a nova RPC obtém o total da encomenda no banco, verifica sessão/posse, estado pendente, método, referência e ausência de pagamento anterior; o INSERT direto de clientes é revogado. O frontend agora chama a RPC e deixa de enviar o montante.
+
+**Ainda por validar:** a migração não foi executada. Confirmar que as permissões existentes, as colunas e os tipos de `payments` correspondem ao SQL; testar checkout autenticado e convidado, upload de comprovativo, repetição de pedidos e confirmação administrativa num ambiente de teste. A migração de criação de pagamento deve ser aplicada em conjunto com a revisão das políticas atuais de INSERT em `payments`.

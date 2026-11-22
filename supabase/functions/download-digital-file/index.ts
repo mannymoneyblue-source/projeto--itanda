@@ -105,6 +105,7 @@ Deno.serve(async (req: Request) => {
     .eq('id', delivery.id)
     .eq('customer_id', userData.user.id)
     .eq('download_count', delivery.download_count)
+    .lt('download_count', delivery.max_downloads)
     .gt('expires_at', new Date().toISOString())
     .select('id')
     .maybeSingle();

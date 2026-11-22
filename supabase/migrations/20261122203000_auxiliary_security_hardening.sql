@@ -62,9 +62,14 @@ DROP POLICY IF EXISTS "customer_update_payment_proof" ON public.payments;
 REVOKE UPDATE ON TABLE public.payments FROM anon, authenticated;
 GRANT UPDATE (proof_path) ON TABLE public.payments TO anon, authenticated;
 
+-- Keep RLS helper functions outside the PostgREST-exposed public schema.
+CREATE SCHEMA IF NOT EXISTS private;
+REVOKE ALL ON SCHEMA private FROM PUBLIC;
+GRANT USAGE ON SCHEMA private TO anon, authenticated;
+
 -- SECURITY DEFINER helper avoids depending on anon SELECT access to orders/payments
 -- from inside Storage and payments RLS policies.
-CREATE OR REPLACE FUNCTION public.can_submit_payment_proof(p_order_id uuid)
+CREATE OR REPLACE FUNCTION private.can_submit_payment_proof(p_order_id uuid)
 RETURNS boolean
 LANGUAGE sql
 STABLE
@@ -85,10 +90,10 @@ AS $$
   );
 $$;
 
-REVOKE EXECUTE ON FUNCTION public.can_submit_payment_proof(uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.can_submit_payment_proof(uuid) TO anon, authenticated;
+REVOKE EXECUTE ON FUNCTION private.can_submit_payment_proof(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION private.can_submit_payment_proof(uuid) TO anon, authenticated;
 
-CREATE OR REPLACE FUNCTION public.can_upload_payment_proof(p_order_id uuid)
+CREATE OR REPLACE FUNCTION private.can_upload_payment_proof(p_order_id uuid)
 RETURNS boolean
 LANGUAGE sql
 STABLE
@@ -110,8 +115,8 @@ AS $$
   );
 $$;
 
-REVOKE EXECUTE ON FUNCTION public.can_upload_payment_proof(uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.can_upload_payment_proof(uuid) TO anon, authenticated;
+REVOKE EXECUTE ON FUNCTION private.can_upload_payment_proof(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION private.can_upload_payment_proof(uuid) TO anon, authenticated;
 
 CREATE POLICY "customer_update_payment_proof"
 ON public.payments
@@ -120,13 +125,13 @@ TO anon, authenticated
 USING (
   status = 'pending'
   AND proof_path IS NULL
-  AND public.can_submit_payment_proof(order_id)
+  AND private.can_submit_payment_proof(order_id)
 )
 WITH CHECK (
   status = 'pending'
   AND proof_path IS NOT NULL
   AND proof_path LIKE order_id::text || '/%'
-  AND public.can_submit_payment_proof(order_id)
+  AND private.can_submit_payment_proof(order_id)
 );
 
 -- Uploads must target a real pending order/payment and use an allowed file type,
@@ -142,7 +147,7 @@ WITH CHECK (
   AND COALESCE(metadata->>'mimetype', '') IN ('image/jpeg', 'image/png', 'application/pdf')
   AND COALESCE(metadata->>'size', '') ~ '^[0-9]+$'
   AND (metadata->>'size')::bigint BETWEEN 1 AND 5242880
-  AND public.can_upload_payment_proof(split_part(name, '/', 1)::uuid)
+  AND private.can_upload_payment_proof(split_part(name, '/', 1)::uuid)
 );
 
 -- Attach only an uploaded object under the matching pending order folder.

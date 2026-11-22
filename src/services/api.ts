@@ -273,22 +273,16 @@ export async function fetchOrderById(id: string): Promise<Order | null> {
 export async function createPayment(params: {
   order_id: string;
   method: 'transfer' | 'reference';
-  amount: number;
   reference?: string;
-}): Promise<Payment | null> {
-  const { data, error } = await supabase
-    .from('payments')
-    .insert({
-      order_id: params.order_id,
-      method: params.method,
-      amount: params.amount,
-      reference: params.reference || null,
-      status: 'pending',
-    })
-    .select()
-    .maybeSingle();
+}): Promise<string> {
+  const { data, error } = await supabase.rpc('create_order_payment', {
+    p_order_id: params.order_id,
+    p_method: params.method,
+    p_reference: params.reference || null,
+  });
   if (error) throw error;
-  return data as Payment | null;
+  if (typeof data !== 'string') throw new Error('Não foi possível registar o pagamento.');
+  return data;
 }
 
 export async function uploadPaymentProof(file: File, orderId: string): Promise<string> {

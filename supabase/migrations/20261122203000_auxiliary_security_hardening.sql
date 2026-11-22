@@ -71,7 +71,7 @@ USING (
   AND EXISTS (
     SELECT 1 FROM public.orders AS o
     WHERE o.id = payments.order_id
-      AND (o.customer_id = (SELECT auth.uid()) OR o.customer_id IS NULL)
+      AND ((auth.uid() IS NULL AND o.customer_id IS NULL) OR (auth.uid() IS NOT NULL AND o.customer_id = (SELECT auth.uid())))
       AND o.status = 'pending'
   )
 )

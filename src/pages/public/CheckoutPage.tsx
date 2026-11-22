@@ -86,14 +86,13 @@ export function CheckoutPage() {
       const payment = await createPayment({
         order_id: newOrderId,
         method: paymentMethod,
-        amount: totalPrice,
         reference: paymentRef || undefined,
       });
 
       // 3. Upload proof if provided (only for transfer)
-      if (paymentMethod === 'transfer' && proofFile && payment) {
+      if (paymentMethod === 'transfer' && proofFile) {
         const proofPath = await uploadPaymentProof(proofFile, newOrderId);
-        await attachPaymentProof(payment.id, proofPath);
+        await attachPaymentProof(payment, proofPath);
       }
 
       // Only show success if the order was really created

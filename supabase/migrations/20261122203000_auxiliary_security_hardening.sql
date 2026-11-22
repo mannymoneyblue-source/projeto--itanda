@@ -70,7 +70,7 @@ LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path = public
-AS $
+AS $$
   SELECT EXISTS (
     SELECT 1
     FROM public.orders AS o
@@ -83,7 +83,7 @@ AS $
         OR (auth.uid() IS NOT NULL AND o.customer_id = auth.uid())
       )
   );
-$;
+$$;
 
 REVOKE EXECUTE ON FUNCTION public.can_submit_payment_proof(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.can_submit_payment_proof(uuid) TO anon, authenticated;
@@ -94,7 +94,7 @@ LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path = public
-AS $
+AS $$
   SELECT EXISTS (
     SELECT 1
     FROM public.orders AS o
@@ -108,7 +108,7 @@ AS $
         OR (auth.uid() IS NOT NULL AND o.customer_id = auth.uid())
       )
   );
-$;
+$$;
 
 REVOKE EXECUTE ON FUNCTION public.can_upload_payment_proof(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.can_upload_payment_proof(uuid) TO anon, authenticated;

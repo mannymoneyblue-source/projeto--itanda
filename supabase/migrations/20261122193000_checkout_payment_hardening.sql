@@ -26,9 +26,10 @@ DECLARE
   v_total bigint := 0;
   v_customer_id uuid := auth.uid();
 BEGIN
-  IF jsonb_typeof(p_items) IS DISTINCT FROM 'array'
-     OR jsonb_array_length(p_items) < 1
-     OR jsonb_array_length(p_items) > 50 THEN
+  IF jsonb_typeof(p_items) IS DISTINCT FROM 'array' THEN
+    RAISE EXCEPTION 'A lista de itens da encomenda é inválida';
+  END IF;
+  IF jsonb_array_length(p_items) < 1 OR jsonb_array_length(p_items) > 50 THEN
     RAISE EXCEPTION 'A encomenda deve conter entre 1 e 50 itens';
   END IF;
 

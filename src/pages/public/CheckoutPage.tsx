@@ -3,7 +3,7 @@ import { ArrowLeft, Check, CreditCard, FileText, Lock, Copy, Upload, Landmark, S
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Link, useRouter } from '@/contexts/RouterContext';
-import { createOrder, createPayment, uploadPaymentProof, attachPaymentProof } from '@/services/api';
+import { createCheckout, uploadPaymentProof, attachPaymentProof } from '@/services/api';
 import { formatKz, paymentMethodLabel } from '@/utils/format';
 import type { PaymentMethod } from '@/types';
 
@@ -72,33 +72,23 @@ export function CheckoutPage() {
     setLoading(true);
 
     try {
-      // 1. Create the order
-      const newOrderId = await createOrder({
+      // Create the order and its pending payment in one database transaction.
+      const checkout = await createCheckout({
         items: items.map((item) => ({ product_id: item.product.id, quantity: item.quantity })),
         customer_email: email,
         customer_name: name,
         customer_phone: phone || undefined,
         notes: notes || undefined,
         is_guest: !user,
-      });
-
-      // 2. Create the pending payment
-      const payment = await createPayment({
-        order_id: newOrderId,
         method: paymentMethod,
-        amount: totalPrice,
         reference: paymentRef || undefined,
       });
+      const newOrderId = checkout.orderId;
 
-      // 3. Upload proof if provided (only for transfer)
-      if (paymentMethod === 'transfer' && proofFile && payment) {
+      // Upload proof only after the atomic checkout transaction succeeds.
+      if (paymentMethod === 'transfer' && proofFile) {
         const proofPath = await uploadPaymentProof(proofFile, newOrderId);
-        await attachPaymentProof(payment.id, proofPath);
-      }
-
-      // Only show success if the order was really created
-      if (!newOrderId) {
-        throw new Error('Não foi possível criar a encomenda.');
+        await attachPaymentProof(checkout.paymentId, proofPath);
       }
 
       setOrderId(newOrderId);
@@ -353,7 +343,7 @@ export function CheckoutPage() {
                   <div className="mt-4 pt-3 border-t border-border text-xs text-text-secondary leading-relaxed">
                     <p className="flex items-start gap-1.5">
                       <ShieldCheck size={14} className="text-success-500 flex-shrink-0 mt-0.5" />
-                      Após fazeres a transferência, a equipa Ĉitanda irá verificar o comprovativo e confirmar o pagamento. Assim que confirmado, receberás acesso aos ficheiros digitais{user ? ' na tua conta' : ' por email'}.
+                      Após fazeres a transferência, a equipa Ĉitanda irá verificar o comprovativo e confirmar o pagamento. Os downloads ficam disponíveis na tua conta depois da confirmação. Compras como convidado ainda não têm acesso automático aos ficheiros nesta versão.
                     </p>
                   </div>
                 </div>
@@ -361,7 +351,7 @@ export function CheckoutPage() {
 
               {paymentMethod !== 'transfer' && (
                 <div className="p-4 rounded-lg bg-surface-hover text-sm text-text-secondary mb-6 text-left">
-                  O pagamento será confirmado manualmente. Assim que for validado, receberás acesso aos ficheiros digitais{user ? ' na tua conta' : ' por email'}.
+                  O pagamento será confirmado manualmente. Depois da confirmação, os downloads ficam disponíveis na tua conta. Compras como convidado ainda não têm acesso automático aos ficheiros nesta versão.
                 </div>
               )}
 

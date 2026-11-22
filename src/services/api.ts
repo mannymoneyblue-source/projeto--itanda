@@ -231,24 +231,35 @@ export async function deleteExternalLink(linkId: string): Promise<void> {
 }
 
 // ---- Orders ----
-export async function createOrder(params: {
+export async function createCheckout(params: {
   items: { product_id: string; quantity: number }[];
   customer_email: string;
   customer_name: string;
   customer_phone?: string;
   notes?: string;
   is_guest: boolean;
-}): Promise<string> {
-  const { data, error } = await supabase.rpc('create_order', {
+  method: 'transfer' | 'reference';
+  reference?: string;
+}): Promise<{ orderId: string; paymentId: string }> {
+  const { data, error } = await supabase.rpc('create_checkout', {
     p_items: JSON.stringify(params.items),
     p_customer_email: params.customer_email,
     p_customer_name: params.customer_name,
     p_customer_phone: params.customer_phone || null,
     p_notes: params.notes || null,
     p_is_guest: params.is_guest,
+    p_method: params.method,
+    p_reference: params.reference || null,
   });
   if (error) throw error;
-  return data as string;
+  if (
+    !data ||
+    typeof data.order_id !== 'string' ||
+    typeof data.payment_id !== 'string'
+  ) {
+    throw new Error('Não foi possível registar a encomenda e o pagamento.');
+  }
+  return { orderId: data.order_id, paymentId: data.payment_id };
 }
 
 export async function fetchMyOrders(): Promise<Order[]> {
@@ -273,42 +284,48 @@ export async function fetchOrderById(id: string): Promise<Order | null> {
 export async function createPayment(params: {
   order_id: string;
   method: 'transfer' | 'reference';
-  amount: number;
   reference?: string;
-}): Promise<Payment | null> {
-  const { data, error } = await supabase
-    .from('payments')
-    .insert({
-      order_id: params.order_id,
-      method: params.method,
-      amount: params.amount,
-      reference: params.reference || null,
-      status: 'pending',
-    })
-    .select()
-    .maybeSingle();
+}): Promise<string> {
+  const { data, error } = await supabase.rpc('create_order_payment', {
+    p_order_id: params.order_id,
+    p_method: params.method,
+    p_reference: params.reference || null,
+  });
   if (error) throw error;
-  return data as Payment | null;
+  if (typeof data !== 'string') throw new Error('Não foi possível registar o pagamento.');
+  return data;
 }
 
 export async function uploadPaymentProof(file: File, orderId: string): Promise<string> {
-  const ext = file.name.split('.').pop();
-  const path = `${orderId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+  const allowedTypes: Record<string, string> = {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'application/pdf': 'pdf',
+  };
+  const extension = allowedTypes[file.type];
+  if (!extension) throw new Error('Formato de comprovativo não permitido.');
+  if (file.size <= 0 || file.size > 5 * 1024 * 1024) {
+    throw new Error('O comprovativo deve ter até 5 MB.');
+  }
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(orderId)) {
+    throw new Error('Encomenda inválida.');
+  }
+
+  const proofPath = orderId + '/' + crypto.randomUUID() + '.' + extension;
   const { error: uploadError } = await supabase.storage
     .from('payment-proofs')
-    .upload(path, file, { contentType: file.type });
+    .upload(proofPath, file, { contentType: file.type, upsert: false });
   if (uploadError) throw uploadError;
-  return path;
+  return proofPath;
 }
 
 export async function attachPaymentProof(paymentId: string, proofPath: string): Promise<void> {
-  const { error } = await supabase
-    .from('payments')
-    .update({ proof_path: proofPath })
-    .eq('id', paymentId);
+  const { error } = await supabase.rpc('attach_payment_proof', {
+    p_payment_id: paymentId,
+    p_proof_path: proofPath,
+  });
   if (error) throw error;
 }
-
 export async function getPaymentProofUrl(proofPath: string): Promise<string> {
   const { data, error } = await supabase.storage
     .from('payment-proofs')
@@ -329,15 +346,21 @@ export async function rejectPayment(paymentId: string, reason?: string): Promise
 export async function fetchMyDeliveries(): Promise<DigitalDelivery[]> {
   const { data, error } = await supabase
     .from('digital_deliveries')
-    .select('*, product:products(*)')
+    .select('id, order_id, product_id, customer_id, download_count, max_downloads, expires_at, created_at, product:products(id, name, file_name)')
     .order('created_at', { ascending: false });
   if (error) throw error;
   return data as DigitalDelivery[];
 }
 
-export async function incrementDownload(deliveryId: string): Promise<void> {
-  const { error } = await supabase.rpc('increment_download_count', { p_delivery_id: deliveryId });
+export async function requestDeliveryDownload(deliveryId: string): Promise<string> {
+  const { data, error } = await supabase.functions.invoke('download-digital-file', {
+    body: { delivery_id: deliveryId },
+  });
   if (error) throw error;
+  if (!data?.signedUrl || typeof data.signedUrl !== 'string') {
+    throw new Error('Não foi possível gerar o link de download.');
+  }
+  return data.signedUrl;
 }
 
 // ---- Profile ----

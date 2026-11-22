@@ -292,23 +292,35 @@ export async function createPayment(params: {
 }
 
 export async function uploadPaymentProof(file: File, orderId: string): Promise<string> {
-  const ext = file.name.split('.').pop();
-  const path = `${orderId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+  const allowedTypes: Record<string, string> = {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'application/pdf': 'pdf',
+  };
+  const extension = allowedTypes[file.type];
+  if (!extension) throw new Error('Formato de comprovativo não permitido.');
+  if (file.size <= 0 || file.size > 5 * 1024 * 1024) {
+    throw new Error('O comprovativo deve ter até 5 MB.');
+  }
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(orderId)) {
+    throw new Error('Encomenda inválida.');
+  }
+
+  const proofPath = orderId + '/' + crypto.randomUUID() + '.' + extension;
   const { error: uploadError } = await supabase.storage
     .from('payment-proofs')
-    .upload(path, file, { contentType: file.type });
+    .upload(proofPath, file, { contentType: file.type, upsert: false });
   if (uploadError) throw uploadError;
-  return path;
+  return proofPath;
 }
 
 export async function attachPaymentProof(paymentId: string, proofPath: string): Promise<void> {
-  const { error } = await supabase
-    .from('payments')
-    .update({ proof_path: proofPath })
-    .eq('id', paymentId);
+  const { error } = await supabase.rpc('attach_payment_proof', {
+    p_payment_id: paymentId,
+    p_proof_path: proofPath,
+  });
   if (error) throw error;
 }
-
 export async function getPaymentProofUrl(proofPath: string): Promise<string> {
   const { data, error } = await supabase.storage
     .from('payment-proofs')

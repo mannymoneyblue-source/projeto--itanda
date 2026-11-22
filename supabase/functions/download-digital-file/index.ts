@@ -34,11 +34,15 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: 'Serviço temporariamente indisponível.' }, 500);
   }
 
+  const accessToken = authorization.slice('Bearer '.length).trim();
+  if (!accessToken) {
+    return jsonResponse({ error: 'Autenticação necessária.' }, 401);
+  }
+
   const userClient = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: authorization } },
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const { data: userData, error: authError } = await userClient.auth.getUser();
+  const { data: userData, error: authError } = await userClient.auth.getUser(accessToken);
   if (authError || !userData.user) {
     return jsonResponse({ error: 'Sessão inválida ou expirada.' }, 401);
   }

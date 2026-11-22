@@ -353,7 +353,7 @@ export function CheckoutPage() {
                   <div className="mt-4 pt-3 border-t border-border text-xs text-text-secondary leading-relaxed">
                     <p className="flex items-start gap-1.5">
                       <ShieldCheck size={14} className="text-success-500 flex-shrink-0 mt-0.5" />
-                      Após fazeres a transferência, a equipa Ĉitanda irá verificar o comprovativo e confirmar o pagamento. Assim que confirmado, receberás acesso aos ficheiros digitais{user ? ' na tua conta' : ' por email'}.
+                      Após fazeres a transferência, a equipa Ĉitanda irá verificar o comprovativo e confirmar o pagamento. Os downloads ficam disponíveis na tua conta depois da confirmação. Compras como convidado ainda não têm acesso automático aos ficheiros nesta versão.
                     </p>
                   </div>
                 </div>
@@ -361,7 +361,7 @@ export function CheckoutPage() {
 
               {paymentMethod !== 'transfer' && (
                 <div className="p-4 rounded-lg bg-surface-hover text-sm text-text-secondary mb-6 text-left">
-                  O pagamento será confirmado manualmente. Assim que for validado, receberás acesso aos ficheiros digitais{user ? ' na tua conta' : ' por email'}.
+                  O pagamento será confirmado manualmente. Depois da confirmação, os downloads ficam disponíveis na tua conta. Compras como convidado ainda não têm acesso automático aos ficheiros nesta versão.
                 </div>
               )}
 

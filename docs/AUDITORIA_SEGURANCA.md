@@ -38,6 +38,18 @@ O frontend original tentava usar `download_token` como se fosse um token de aces
 
 **Limitação:** a implementação atual cobre apenas clientes autenticados. O fluxo guest precisa de um mecanismo seguro próprio antes de ser considerado concluído.
 
+### Alto — comprovativos de pagamento
+A migration original permitia uploads anónimos para qualquer caminho do bucket e o cliente autenticado tinha UPDATE geral na tabela `payments`. A policy de comprovativo não limitava adequadamente caminho, tipo, tamanho ou estado do pagamento.
+
+**Preparado em código:** a migration `20261122203000_auxiliary_security_hardening.sql` remove UPDATE geral de pagamentos, permite apenas anexar `proof_path`, valida a titularidade da encomenda pendente, restringe uploads ao diretório da encomenda e a ficheiros JPG/PNG/PDF até 5 MB, e impede substituir um comprovativo já anexado. O frontend valida MIME/tamanho, gera nomes UUID e usa a função `attach_payment_proof`.
+
+**Limitação:** estas regras dependem da forma como o Storage preenche `metadata.mimetype` e `metadata.size`; precisam de teste num ambiente real antes da aplicação.
+
+### Alto — notificações de login e denúncias públicas
+A função `notify_new_login` aceitava um `p_user_id` fornecido pelo cliente, permitindo tentar criar notificações em nome de outra conta. A função pública `report_review` aceitava motivos sem limite e permitia incrementar denúncias indefinidamente.
+
+**Preparado em código:** a migration `20261122203000_auxiliary_security_hardening.sql` exige que o ID do evento de login corresponda a `auth.uid()`, valida o método e limita o user-agent. As denúncias públicas ficam limitadas a 20 por avaliação e o motivo a 500 caracteres. Isto reduz spam, mas não substitui rate limiting por IP/identidade.
+
 ### Alto — validação do checkout e confirmação de pagamento
 A função original `create_order` não impunha limites suficientes ao número de itens nem à quantidade por item. A confirmação de pagamento não verificava que o valor recebido correspondia ao total da encomenda e não impedia claramente reprocessamento.
 
@@ -55,7 +67,8 @@ A função original `create_order` não impunha limites suficientes ao número d
 ## Sequência de trabalho
 
 1. Implementar um mecanismo guest sem leitura pública da tabela nem exposição de tokens no Data API.
-2. Rever uploads de comprovativos e notificações de login.
-3. Verificar compatibilidade das migrations e Edge Functions.
-4. Instalar dependências, executar build e testes automatizados.
-5. Rever o diff final e atualizar o Pull Request antes de qualquer merge.
+2. Implementar um mecanismo de download guest seguro, sem leitura pública da tabela de entregas.
+3. Verificar as policies de Storage com os metadados reais de upload.
+4. Verificar compatibilidade das migrations e Edge Functions.
+5. Instalar dependências, executar build e testes automatizados.
+6. Rever o diff final e atualizar o Pull Request antes de qualquer merge.

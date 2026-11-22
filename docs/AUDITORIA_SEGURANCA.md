@@ -1,51 +1,61 @@
 # Auditoria de segurança — Ĉitanda
 
 **Base analisada:** branch `main`, commit `45c307c27ada661d8371345e3a52e648ef8253dc`  
-**Estado:** análise estática do código e das migrations; nenhuma alteração foi aplicada à base de dados.
+**Trabalho atual:** branch `security/auditoria-e-correcoes`  
+**Estado:** análise estática e correções preparadas em migrations/código. Nenhuma migration foi executada numa base de dados.
 
-## Achados confirmados
+## Achados e estado das correções
 
 ### Crítico — escalada de privilégios em profiles
-A migration inicial concede `SELECT, UPDATE` em `profiles` a `authenticated`, enquanto a policy `update_own_profile` permite ao utilizador atualizar a própria linha. Como não há restrição de colunas nesse grant, a coluna `role` pode ser alvo de alteração pelo próprio utilizador.
+A migration inicial concede `SELECT, UPDATE` em `profiles` a `authenticated`, enquanto a policy permite atualizar a própria linha. Sem restrição de colunas, a coluna `role` pode ser alvo de alteração pelo próprio utilizador.
 
-**Correção proposta:** revogar o UPDATE geral e conceder UPDATE apenas às colunas de perfil que o cliente realmente pode editar (confirmar primeiro os campos usados pelo frontend). A atribuição de `role` deve permanecer exclusiva de uma operação administrativa confiável.
+**Preparado em código:** a migration `20261122183000_citanda_security_hardening.sql` revoga UPDATE geral e concede UPDATE apenas em `full_name` e `phone`. Confirmar a compatibilidade com o esquema real antes de aplicar.
 
 ### Crítico — leitura pública de entregas digitais
-A migration inicial concede `SELECT` em `digital_deliveries` a `anon` e cria a policy `anon_read_deliveries` para registos com `customer_id IS NULL`. A tabela contém `download_token`, pelo que os tokens de entregas guest podem ser expostos.
+A migration inicial concede `SELECT` em `digital_deliveries` a `anon` e cria uma policy para entregas sem cliente autenticado. A tabela contém `download_token`, podendo expor tokens de convidados.
 
-**Correção proposta:** remover a leitura anónima da tabela. Se o negócio precisar de downloads guest, implementar um endpoint autenticado por token individual, que devolva apenas um link temporário para o ficheiro daquela entrega.
+**Preparado em código:** a migration de hardening revoga a leitura anónima e remove a policy pública. O fluxo de download para convidados ainda não foi substituído; por isso, aplicar esta migration antes de implementar e testar uma alternativa guest pode interromper os downloads de convidados.
 
 ### Crítico — autorização demasiado ampla no Storage
-A policy `customer_read_digital_files` verifica apenas se o utilizador tem alguma entrega válida. Não compara o nome do objeto solicitado com `products.file_path` do produto associado àquela entrega.
+A policy original de `customer_read_digital_files` verifica apenas se o utilizador tem alguma entrega válida, sem relacionar o objeto solicitado ao produto comprado.
 
-**Correção proposta:** autorizar apenas o caminho exato do ficheiro associado à entrega do utilizador, validando limites e expiração. Testar também que uma compra não permite descarregar o ficheiro de outro produto.
+**Preparado em código:** a migration de hardening associa o caminho do objeto ao `file_path` do produto da entrega do utilizador. Ainda é necessário testar as permissões e o comportamento do Storage no ambiente de destino.
 
 ### Alto — UPDATE direto em digital_deliveries
-A migration concede `SELECT, UPDATE` a `authenticated` e a policy `customer_update_deliveries` permite atualizar a própria entrega. Isso expõe campos de controlo como contagem, limite, expiração e token.
+A migration inicial concede UPDATE direto a utilizadores autenticados, permitindo potencialmente alterar contagem, limite, expiração e token.
 
-**Correção proposta:** remover UPDATE direto para utilizadores e manter as alterações de contagem numa função controlada no servidor, com validação de titularidade, expiração e limite.
+**Preparado em código:** a migration de hardening revoga UPDATE direto e remove a policy correspondente. A contagem de downloads passa a ser controlada pela Edge Function para clientes autenticados.
 
 ### Alto — uploads de comprovativos sem restrição suficiente
-A migration de comprovativos cria uma policy de INSERT para `anon, authenticated` que só verifica o bucket. Não limita o caminho ao pagamento/encomenda nem restringe o tipo e tamanho do ficheiro nesta policy.
+A policy inicial de INSERT para o bucket de comprovativos permite uploads de `anon, authenticated` com validação limitada.
 
-**Correção proposta:** desenhar upload com associação verificável à encomenda e limites de MIME/tamanho. Não remover o fluxo atual sem implementar alternativa para convidados, pois isso pode interromper o checkout guest.
+**Pendente:** rever o fluxo guest e as regras de Storage em conjunto, para restringir caminho, tipo e tamanho sem quebrar o checkout.
 
-### Alto — URL de download incompatível com o token
-`AccountDownloadsPage.tsx` constrói uma URL Storage com `?token=${delivery.download_token}`. Esse token da aplicação não é um token de acesso emitido pelo Supabase Storage. A função `increment_download_count` apenas incrementa a contagem; não cria uma URL assinada.
+### Alto — download autenticado
+O frontend original tentava usar `download_token` como se fosse um token de acesso do Storage, e a função de incremento não emitia URL assinada.
 
-**Correção proposta:** obter uma URL assinada após autorização do ficheiro exato e incrementar a contagem atomicamente no servidor antes de entregar a URL.
+**Preparado em código:** a Edge Function `download-digital-file` valida a sessão, confirma a titularidade da entrega, verifica expiração e limite, gera URL assinada de curta duração e regista o download. O frontend passou a chamar essa função e deixou de receber o token da tabela.
 
-## Limitações desta auditoria
+**Limitação:** a implementação atual cobre apenas clientes autenticados. O fluxo guest precisa de um mecanismo seguro próprio antes de ser considerado concluído.
+
+### Alto — validação do checkout e confirmação de pagamento
+A função original `create_order` não impunha limites suficientes ao número de itens nem à quantidade por item. A confirmação de pagamento não verificava que o valor recebido correspondia ao total da encomenda e não impedia claramente reprocessamento.
+
+**Preparado em código:** a migration `20261122193000_checkout_payment_hardening.sql` valida estrutura da lista, quantidade por produto, dados do cliente, tipo de sessão e limites numéricos. A confirmação bloqueia pagamentos já processados, compara o valor do pagamento com o total da encomenda e evita criar entregas duplicadas no mesmo processamento.
+
+## Limitações e próximos passos
 
 - Não foram executados `npm install`, build, testes automatizados ou testes de penetração.
-- Não foi inspecionada nem alterada uma base Supabase ligada.
-- Não foram aplicadas migrations nem alterados dados de produção.
-- O fluxo de convidados exige desenho e teste específico antes de revogar permissões, para evitar bloquear pagamentos ou downloads legítimos.
+- Não foi ligado nem inspecionado qualquer projeto Supabase.
+- Nenhuma migration foi executada e nenhum dado de produção foi alterado.
+- A implementação de downloads guest continua pendente; não aplicar a remoção de leitura anónima antes de existir uma alternativa guest testada.
+- A Edge Function depende de `SUPABASE_SERVICE_ROLE_KEY` configurada como secret no ambiente de funções; a chave não deve ser guardada no repositório.
+- As migrations precisam de revisão contra o esquema efetivo antes de execução.
 
-## Próxima sequência técnica
+## Sequência de trabalho
 
-1. Rever todas as migrations posteriores e os campos que o frontend realmente atualiza.
-2. Preparar migrations de segurança com o fluxo guest preservado.
-3. Corrigir o frontend para usar downloads temporários autorizados.
-4. Rever upload de comprovativos e notificações de login.
-5. Executar build e testes antes de abrir Pull Request.
+1. Implementar um mecanismo guest sem leitura pública da tabela nem exposição de tokens no Data API.
+2. Rever uploads de comprovativos e notificações de login.
+3. Verificar compatibilidade das migrations e Edge Functions.
+4. Instalar dependências, executar build e testes automatizados.
+5. Rever o diff final e atualizar o Pull Request antes de qualquer merge.

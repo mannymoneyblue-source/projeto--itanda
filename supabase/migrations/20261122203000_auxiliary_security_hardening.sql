@@ -94,6 +94,7 @@ FOR UPDATE
 TO anon, authenticated
 USING (
   status = 'pending'
+  AND proof_path IS NULL
   AND public.can_submit_payment_proof(order_id)
 )
 WITH CHECK (

@@ -358,11 +358,6 @@ export async function requestDeliveryDownload(deliveryId: string): Promise<strin
   return data.signedUrl;
 }
 
-export async function incrementDownload(deliveryId: string): Promise<void> {
-  const { error } = await supabase.rpc('increment_download_count', { p_delivery_id: deliveryId });
-  if (error) throw error;
-}
-
 // ---- Profile ----
 export async function updateProfile(updates: {
   full_name?: string;

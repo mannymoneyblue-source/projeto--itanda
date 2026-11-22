@@ -1,21 +1,49 @@
 import { useState, useEffect } from 'react';
 import { Download, FileText, Clock, CheckCircle, AlertCircle } from 'lucide-react';
 import { AccountLayout } from '@/layouts/AccountLayout';
-import { fetchMyDeliveries } from '@/services/api';
+import { fetchMyDeliveries, requestDeliveryDownload } from '@/services/api';
 import { formatKz, formatDate } from '@/utils/format';
 import type { DigitalDelivery } from '@/types';
 
 export function AccountDownloadsPage() {
   const [deliveries, setDeliveries] = useState<DigitalDelivery[]>([]);
   const [loading, setLoading] = useState(true);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchMyDeliveries().then(setDeliveries).finally(() => setLoading(false));
+    fetchMyDeliveries()
+      .then(setDeliveries)
+      .catch((error) => {
+        console.error('Erro ao carregar entregas digitais:', error);
+        setDownloadError('Não foi possível carregar os downloads. Atualiza a página e tenta novamente.');
+      })
+      .finally(() => setLoading(false));
   }, []);
+
+  async function handleDownload(deliveryId: string) {
+    setDownloadingId(deliveryId);
+    setDownloadError(null);
+    try {
+      const signedUrl = await requestDeliveryDownload(deliveryId);
+      window.location.assign(signedUrl);
+    } catch (error) {
+      console.error('Erro ao gerar download:', error);
+      setDownloadError('Não foi possível iniciar o download. Verifica a tua ligação ou tenta novamente.');
+    } finally {
+      setDownloadingId(null);
+    }
+  }
 
   return (
     <AccountLayout activePath="/conta/downloads">
       <h1 className="font-display text-2xl font-bold mb-6">Os meus downloads</h1>
+
+      {downloadError && (
+        <div role="alert" className="mb-4 rounded-lg bg-error-500/10 p-3 text-sm text-error-500">
+          {downloadError}
+        </div>
+      )}
 
       {loading ? (
         <div className="space-y-4">
@@ -47,13 +75,14 @@ export function AccountDownloadsPage() {
                   </div>
                   <div className="flex-shrink-0">
                     {available ? (
-                      <a
-                        href={delivery.product?.file_path ? `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/digital-files/${delivery.product.file_path}?token=${delivery.download_token}` : '#'}
+                      <button
+                        type="button"
+                        onClick={() => handleDownload(delivery.id)}
                         className="btn-primary"
-                        download
+                        disabled={downloadingId === delivery.id}
                       >
-                        <Download size={16} /> Descarregar
-                      </a>
+                        <Download size={16} /> {downloadingId === delivery.id ? 'A preparar...' : 'Descarregar'}
+                      </button>
                     ) : expired ? (
                       <span className="badge bg-error-500/10 text-error-500">
                         <AlertCircle size={12} /> Expirado

@@ -96,7 +96,6 @@ export interface DigitalDelivery {
   order_id: string;
   product_id: string;
   customer_id: string | null;
-  download_token: string;
   download_count: number;
   max_downloads: number;
   expires_at: string;

@@ -329,10 +329,21 @@ export async function rejectPayment(paymentId: string, reason?: string): Promise
 export async function fetchMyDeliveries(): Promise<DigitalDelivery[]> {
   const { data, error } = await supabase
     .from('digital_deliveries')
-    .select('*, product:products(*)')
+    .select('id, order_id, product_id, customer_id, download_count, max_downloads, expires_at, created_at, product:products(id, name, file_name)')
     .order('created_at', { ascending: false });
   if (error) throw error;
   return data as DigitalDelivery[];
+}
+
+export async function requestDeliveryDownload(deliveryId: string): Promise<string> {
+  const { data, error } = await supabase.functions.invoke('download-digital-file', {
+    body: { delivery_id: deliveryId },
+  });
+  if (error) throw error;
+  if (!data?.signedUrl || typeof data.signedUrl !== 'string') {
+    throw new Error('Não foi possível gerar o link de download.');
+  }
+  return data.signedUrl;
 }
 
 export async function incrementDownload(deliveryId: string): Promise<void> {

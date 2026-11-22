@@ -62,29 +62,45 @@ DROP POLICY IF EXISTS "customer_update_payment_proof" ON public.payments;
 REVOKE UPDATE ON TABLE public.payments FROM anon, authenticated;
 GRANT UPDATE (proof_path) ON TABLE public.payments TO anon, authenticated;
 
+-- SECURITY DEFINER helper avoids depending on anon SELECT access to orders/payments
+-- from inside Storage and payments RLS policies.
+CREATE OR REPLACE FUNCTION public.can_submit_payment_proof(p_order_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.orders AS o
+    JOIN public.payments AS p ON p.order_id = o.id
+    WHERE o.id = p_order_id
+      AND o.status = 'pending'
+      AND p.status = 'pending'
+      AND (
+        (auth.uid() IS NULL AND o.customer_id IS NULL)
+        OR (auth.uid() IS NOT NULL AND o.customer_id = auth.uid())
+      )
+  );
+$;
+
+REVOKE EXECUTE ON FUNCTION public.can_submit_payment_proof(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.can_submit_payment_proof(uuid) TO anon, authenticated;
+
 CREATE POLICY "customer_update_payment_proof"
 ON public.payments
 FOR UPDATE
 TO anon, authenticated
 USING (
   status = 'pending'
-  AND EXISTS (
-    SELECT 1 FROM public.orders AS o
-    WHERE o.id = payments.order_id
-      AND ((auth.uid() IS NULL AND o.customer_id IS NULL) OR (auth.uid() IS NOT NULL AND o.customer_id = (SELECT auth.uid())))
-      AND o.status = 'pending'
-  )
+  AND public.can_submit_payment_proof(order_id)
 )
 WITH CHECK (
   status = 'pending'
   AND proof_path IS NOT NULL
   AND proof_path LIKE order_id::text || '/%'
-  AND EXISTS (
-    SELECT 1 FROM public.orders AS o
-    WHERE o.id = payments.order_id
-      AND ((auth.uid() IS NULL AND o.customer_id IS NULL) OR (auth.uid() IS NOT NULL AND o.customer_id = (SELECT auth.uid())))
-      AND o.status = 'pending'
-  )
+  AND public.can_submit_payment_proof(order_id)
 );
 
 -- Uploads must target a real pending order/payment and use an allowed file type,
@@ -100,15 +116,7 @@ WITH CHECK (
   AND COALESCE(metadata->>'mimetype', '') IN ('image/jpeg', 'image/png', 'application/pdf')
   AND COALESCE(metadata->>'size', '') ~ '^[0-9]+$'
   AND (metadata->>'size')::bigint BETWEEN 1 AND 5242880
-  AND EXISTS (
-    SELECT 1
-    FROM public.orders AS o
-    JOIN public.payments AS p ON p.order_id = o.id
-    WHERE o.id::text = split_part(name, '/', 1)
-      AND o.status = 'pending'
-      AND p.status = 'pending'
-      AND ((auth.uid() IS NULL AND o.customer_id IS NULL) OR (auth.uid() IS NOT NULL AND o.customer_id = (SELECT auth.uid())))
-  )
+  AND public.can_submit_payment_proof(split_part(name, '/', 1)::uuid)
 );
 
 -- Attach only an uploaded object under the matching pending order folder.

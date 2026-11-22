@@ -61,6 +61,7 @@ A função original `create_order` não impunha limites suficientes ao número d
 - Não foi ligado nem inspecionado qualquer projeto Supabase.
 - Nenhuma migration foi executada e nenhum dado de produção foi alterado.
 - A implementação de downloads guest continua pendente; não aplicar a remoção de leitura anónima antes de existir uma alternativa guest testada.
+- O texto de confirmação do checkout foi corrigido para deixar de prometer entrega de downloads por email, pois não foi encontrada uma integração de envio de email no fluxo analisado.
 - A Edge Function depende de `SUPABASE_SERVICE_ROLE_KEY` configurada como secret no ambiente de funções; a chave não deve ser guardada no repositório.
 - As migrations precisam de revisão contra o esquema efetivo antes de execução.
 

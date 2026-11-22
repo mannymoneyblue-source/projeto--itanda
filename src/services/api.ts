@@ -231,24 +231,35 @@ export async function deleteExternalLink(linkId: string): Promise<void> {
 }
 
 // ---- Orders ----
-export async function createOrder(params: {
+export async function createCheckout(params: {
   items: { product_id: string; quantity: number }[];
   customer_email: string;
   customer_name: string;
   customer_phone?: string;
   notes?: string;
   is_guest: boolean;
-}): Promise<string> {
-  const { data, error } = await supabase.rpc('create_order', {
+  method: 'transfer' | 'reference';
+  reference?: string;
+}): Promise<{ orderId: string; paymentId: string }> {
+  const { data, error } = await supabase.rpc('create_checkout', {
     p_items: JSON.stringify(params.items),
     p_customer_email: params.customer_email,
     p_customer_name: params.customer_name,
     p_customer_phone: params.customer_phone || null,
     p_notes: params.notes || null,
     p_is_guest: params.is_guest,
+    p_method: params.method,
+    p_reference: params.reference || null,
   });
   if (error) throw error;
-  return data as string;
+  if (
+    !data ||
+    typeof data.order_id !== 'string' ||
+    typeof data.payment_id !== 'string'
+  ) {
+    throw new Error('Não foi possível registar a encomenda e o pagamento.');
+  }
+  return { orderId: data.order_id, paymentId: data.payment_id };
 }
 
 export async function fetchMyOrders(): Promise<Order[]> {

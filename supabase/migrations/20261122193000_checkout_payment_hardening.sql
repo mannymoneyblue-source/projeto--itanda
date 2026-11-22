@@ -36,7 +36,7 @@ BEGIN
 
   IF p_customer_email IS NULL
      OR length(btrim(p_customer_email)) > 254
-     OR btrim(p_customer_email) !~* '^[A-Z0-9._%+\\-]+@[A-Z0-9.\\-]+\\.[A-Z]{2,}$' THEN
+     OR btrim(p_customer_email) !~* '^[A-Z0-9._%+-]+@[A-Z0-9.-]+[.][A-Z]{2,}$' THEN
     RAISE EXCEPTION 'Endereço de email inválido';
   END IF;
 

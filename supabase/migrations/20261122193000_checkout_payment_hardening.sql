@@ -25,6 +25,7 @@ DECLARE
   v_subtotal bigint;
   v_total bigint := 0;
   v_customer_id uuid := auth.uid();
+  v_seen_product_ids uuid[] := ARRAY[]::uuid[];
 BEGIN
   IF jsonb_typeof(p_items) IS DISTINCT FROM 'array' THEN
     RAISE EXCEPTION 'A lista de itens da encomenda é inválida';
@@ -70,6 +71,11 @@ BEGIN
     END IF;
 
     v_product_id := (v_item->>'product_id')::uuid;
+    IF v_product_id = ANY(v_seen_product_ids) THEN
+      RAISE EXCEPTION 'A encomenda não pode repetir o mesmo produto';
+    END IF;
+    v_seen_product_ids := array_append(v_seen_product_ids, v_product_id);
+
     v_quantity := (v_item->>'quantity')::integer;
     IF v_quantity < 1 OR v_quantity > 20 THEN
       RAISE EXCEPTION 'A quantidade por produto deve estar entre 1 e 20';

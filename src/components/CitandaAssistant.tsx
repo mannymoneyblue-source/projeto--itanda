@@ -69,7 +69,7 @@ export function CitandaAssistant() {
     <>
       {open && (
         <section
-          className="fixed bottom-24 right-4 sm:right-6 z-[80] flex h-[min( min(640px, calc(100dvh-8rem)), 78dvh)] max-h-[640px] w-[calc(100vw-2rem)] max-w-[390px] flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl"
+          className="fixed bottom-24 right-4 sm:right-6 z-[80] flex h-[min(640px,calc(100dvh-8rem))] max-h-[640px] w-[calc(100vw-2rem)] max-w-[390px] flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl"
           aria-label="Assistente Ĉitanda"
         >
           <header className="flex items-center gap-3 border-b border-border bg-base-800 px-4 py-3">
